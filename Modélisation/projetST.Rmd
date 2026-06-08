@@ -1,0 +1,1649 @@
+---
+title: 'Analyse et Modélisation de Séries Temporelles : Valeur des Constructions Immobilières
+  et Production Industrielle Alimentaire'
+author: "AgriSmart"
+date: "2026-04-21"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center",
+  fig.width = 8,
+  fig.height = 4
+)
+```
+
+
+\section{Introduction}
+
+Dans le cadre du module \textbf{Séries Temporelles}, ce travail porte sur l'analyse
+et la modélisation de deux séries temporelles économiques à fréquence mensuelle :
+
+\vspace{0.3cm}
+
+\begin{itemize}
+  \item \textbf{Série 1 :} La valeur des constructions immobilières
+        \textit{(Février 1982 -- Janvier 2015, 396 observations)}
+  \item \textbf{Série 2 :} L'indice de production industrielle du secteur alimentaire
+        \textit{IPG311A2N} (Janvier 1972 -- Mars 2024, 627 observations),
+        issu de la base \textbf{FRED} de la Réserve Fédérale de St. Louis.
+\end{itemize}
+
+\vspace{0.3cm}
+L'objectif est de mener, pour chacune des séries, une analyse complète en
+\textbf{trois phases} :
+\begin{itemize}
+  \item \textbf{Analyse statistique et graphique} 
+  \item \textbf{Ajustement de la tendance et de la saisonnalité} 
+  \item \textbf{Modélisation des résidus par un processus ARIMA} 
+  \item \textbf{Analyse croisée entre les deux séries} 
+\end{itemize}
+
+\vspace{0.5cm}
+
+
+\section{Plan}
+
+\begin{enumerate}
+  \item \textbf{Chargement des données et packages}
+  \item \textbf{Série 1 — Valeur des Constructions Immobilières}
+  \begin{itemize}
+    \item Phase 1 : Analyse statistique et graphique
+    \item Phase 2 : Ajustement de la série
+    \item Phase 3 : Modélisation ARIMA des résidus
+  \end{itemize}
+  \item \textbf{Série 2 — Production Industrielle Alimentaire}
+  \begin{itemize}
+    \item Phase 1 : Analyse statistique et graphique
+    \item Phase 2 : Ajustement de la série
+    \item Phase 3 : Modélisation ARIMA des résidus
+  \end{itemize}
+  \item \textbf{Analyse Croisée (CCF)}
+  \item \textbf{Conclusion}
+\end{enumerate}
+
+\section{Chargement des données et packages}
+
+\subsection{Packages utilisés}
+
+\vspace{0.3cm}
+
+Les packages suivants sont utilisés tout au long de cette analyse :
+
+\vspace{0.2cm}
+
+```{r packages}
+library(readxl)      # Importation des fichiers Excel
+library(tidyverse)   # Manipulation et visualisation des données
+library(forecast)    # Modélisation ARIMA et prévisions
+library(tseries)     # Tests de stationnarité (ADF, KPSS)
+library(zoo)         # Gestion des séries temporelles irrégulières
+library(xts)
+library(ggplot2)     # Visualisation avancée
+library(gridExtra)   # Mise en page de plusieurs graphiques
+library(knitr)       # Tableaux formatés dans le document
+```
+
+\subsection{Importation des données}
+
+\vspace{0.3cm}
+
+\subsubsection{Série 1 — \textit{Valeur des Constructions Immobilières}}
+
+\vspace{0.2cm}
+
+```{r import-serie1}
+serie1_raw = read_excel("value of real estate constructions.xlsx",
+                         col_names = c("date", "valeur"),
+                         skip      = 1)
+
+serie1_raw$date   = as.Date(serie1_raw$date)
+serie1_raw$valeur = as.numeric(serie1_raw$valeur)
+
+# Objet ts
+serie1_ts = ts(serie1_raw$valeur, start = c(1982, 1),end = c(2015, 1),
+                frequency = 12)
+# Objet zoo
+serie1_zoo = zoo(serie1_raw$valeur,
+                  order.by = serie1_raw$date)
+# Objet xts
+serie1_xts <- xts(serie1_raw$valeur,
+                  order.by = serie1_raw$date)
+
+print(class(serie1_ts))
+print(class(serie1_zoo))
+print(class(serie1_xts))
+
+cat("Série 1 — Aperçu :\n")
+cat("  Période     :", format(min(serie1_raw$date), "%B %Y"),
+    "→", format(max(serie1_raw$date), "%B %Y"), "\n")
+cat("  Observations:", nrow(serie1_raw), "\n")
+cat("  Min / Max   :", min(serie1_raw$valeur),
+    "/", max(serie1_raw$valeur), "\n")
+```
+
+\vspace{0.3cm}
+
+\subsubsection{Série 2 — \textit{Production Industrielle Alimentaire}}
+
+\vspace{0.2cm}
+
+```{r import-serie2}
+serie2_raw = read_excel("Industrial Production food  S C11.xlsx",
+                                   skip      = 10,
+                                   col_names = TRUE)
+
+colnames(serie2_raw) = c("date", "valeur")
+serie2_raw$date      = as.Date(serie2_raw$date)
+serie2_raw$valeur    = as.numeric(serie2_raw$valeur)
+serie2_raw           = na.omit(serie2_raw)
+
+# Objet ts
+serie2_ts =  ts(serie2_raw$valeur,
+                start     = c(1972, 1), end = c(2024, 3),
+                frequency = 12)
+
+# Objet zoo
+serie2_zoo <- zoo(serie2_raw$valeur,
+                  order.by = serie2_raw$date)
+
+# Objet xts
+serie2_xts <- xts(serie2_raw$valeur,
+                  order.by = serie2_raw$date)
+
+print(class(serie2_ts))
+print(class(serie2_zoo))
+print(class(serie2_xts))
+
+cat("Série 2 — Aperçu :\n")
+cat("  Période     :", format(min(serie2_raw$date), "%B %Y"),
+    "→", format(max(serie2_raw$date), "%B %Y"), "\n")
+cat("  Observations:", nrow(serie2_raw), "\n")
+cat("  Min / Max   :", round(min(serie2_raw$valeur), 2),
+    "/", round(max(serie2_raw$valeur), 2), "\n")
+```
+
+\vspace{0.4cm}
+
+\subsection{Tableau récapitulatif des deux séries}
+
+\vspace{0.2cm}
+
+```{r recap-table}
+recap <- data.frame(
+  Série        = c("Constructions Immobilières",
+                   "Production Industrielle Alimentaire"),
+  Début        = c("Janvier 1982", "Janvier 1972"),
+  Fin          = c("Janvier 2015", "Mars 2024"),
+  Observations = c(nrow(serie1_raw), nrow(serie2_raw)),
+  Moyenne      = c(round(mean(serie1_raw$valeur), 2),
+                   round(mean(serie2_raw$valeur), 2)),
+  Écart.type   = c(round(sd(serie1_raw$valeur), 2),
+                   round(sd(serie2_raw$valeur), 2))
+)
+
+kable(recap,
+      caption  = "\\textbf{Récapitulatif des deux séries temporelles}",
+      booktabs = TRUE,
+      align    = "lccccc")
+```
+
+\vspace{0.3cm}
+\section{Série 1 — Valeur des Constructions Immobilières}
+
+\subsection{Phase 1 : Analyse statistique et graphique}
+
+\vspace{0.3cm}
+
+\subsubsection{Analyse graphique}
+
+\vspace{0.2cm}
+
+```{r plot-serie1,fig.width=7, fig.height=4, fig.align='center'}
+
+plot(serie1_ts,
+     main = "Valeur des Constructions Immobilières (1982–2015)",
+     ylab = "Valeur",
+     xlab = "Temps")
+
+```
+
+La série ne présente pas une tendance monotone simple. On distingue \textbf{plusieurs phases} :
+
+\begin{itemize}
+  \item \textbf{1982–1996} : une phase de déclin progressif avec des valeurs passant
+        d'environ 180 à 95, accompagnée d'une saisonnalité régulière.
+  \item \textbf{1996–2002} : une phase de reprise marquée, avec des valeurs atteignant
+        un pic autour de 200.
+  \item \textbf{2002–2009} : une chute brutale et prolongée, avec les valeurs tombant
+        jusqu'à environ 40, traduisant un \textbf{changement structurel majeur}
+        vraisemblablement lié à la crise financière mondiale de 2008.
+  \item \textbf{2009–2015} : une phase de légère reprise, sans retrouver les niveaux
+        antérieurs.
+\end{itemize}
+
+On peut écrire $X_t = f(T_t, S_t, E_t)$ où $T_t$ désigne une tendance non linéaire
+avec changement structurel, $S_t$ la composante saisonnière régulière et $E_t$
+les fluctuations irrégulières dont la \textbf{variance s'amplifie} au fil du temps.
+\vspace{0.3cm}
+
+\subsubsection{Agrégation annuelle}
+
+\vspace{0.2cm}
+
+```{r annual-serie1, fig.width=7, fig.height=4, fig.align='center'}
+serie1_annual = aggregate(serie1_ts, nfrequency = 1, FUN = mean)
+
+plot(serie1_annual,
+     main = "Moyenne annuelle — Constructions Immobilières",
+     ylab = "Valeur moyenne",
+     xlab = "Année")
+```
+
+L'agrégation annuelle confirme la présence d'un \textbf{changement structurel majeur}.
+On distingue clairement :
+
+\begin{itemize}
+  \item Une \textbf{phase de déclin} entre 1982 et 1988, avec une chute des valeurs
+        jusqu'à environ 85.
+  \item Une \textbf{phase de reprise} entre 1988 et 2002, atteignant un pic historique
+        d'environ 170.
+  \item Une \textbf{rupture brutale} à partir de 2002–2003, avec une chute drastique
+        jusqu'à environ 50, confirmant le changement structurel déjà observé sur
+        la série brute.
+  \item Une \textbf{légère reprise} à partir de 2009, sans retrouver les niveaux
+        d'avant la rupture.
+\end{itemize}
+
+\vspace{0.3cm}
+
+\subsubsection{Analyse par boîtes à moustaches}
+
+\vspace{0.2cm}
+
+```{r boxplot-serie1, fig.width=5, fig.height=4}
+
+boxplot(serie1_ts ~ cycle(serie1_ts),
+        main   = "Boxplot mensuel — Constructions Immobilières",
+        ylab   = "Valeur",
+        xlab   = "Mois",
+        names  = c("Jan","Fév","Mar","Avr","Mai","Jun",
+                   "Jul","Aoû","Sep","Oct","Nov","Déc"))
+
+boxplot(serie1_annual,
+        main = "Boxplot annuel — Constructions Immobilières",
+        ylab = "Valeur moyenne",
+        xlab = "Année")
+
+```
+
+Le boxplot mensuel révèle une \textbf{saisonnalité marquée} : les valeurs les plus
+élevées sont observées durant les mois de \textbf{mars à juillet}, correspondant
+à la haute saison de l'activité de construction, tandis que les mois de
+\textbf{novembre à février} affichent des valeurs nettement plus faibles.
+
+Le boxplot annuel, quant à lui, présente une \textbf{dispersion globale importante}
+avec une médiane autour de 105 et un écart entre valeur minimale (~50) et maximale
+(~170), reflet direct du \textbf{changement structurel} identifié précédemment.
+\vspace{0.3cm}
+
+\subsubsection{Analyse statistique descriptive}
+
+\vspace{0.2cm}
+
+```{r stats-serie1}
+cat("Statistiques descriptives — Série 1 :\n")
+cat("  Moyenne        :", round(mean(serie1_raw$valeur), 2), "\n")
+cat("  Variance       :", round(var(serie1_raw$valeur),  2), "\n")
+cat("  Écart-type     :", round(sd(serie1_raw$valeur),   2), "\n")
+cat("  Minimum        :", min(serie1_raw$valeur), "\n")
+cat("  Maximum        :", max(serie1_raw$valeur), "\n")
+
+summary(serie1_ts)
+```
+
+Les statistiques descriptives confirment cette variabilité : avec une moyenne de
+\textbf{112.34}, un écart-type de \textbf{37.58} et un étendue allant de
+\textbf{31.9} à \textbf{197.9}, les données présentent une \textbf{forte dispersion}
+autour de la moyenne, traduisant l'instabilité structurelle de la série sur la
+période d'étude.
+
+\vspace{0.3cm}
+
+\subsubsection{Fonction d'autocorrélation (ACF)}
+
+\vspace{0.2cm}
+
+```{r acf-serie1,fig.width=7, fig.height=4, fig.align='center'}
+acf(serie1_ts,
+    type = "correlation",
+    plot = TRUE,
+    main = "ACF — Valeur des Constructions Immobilières")
+```
+
+L'ACF présente une \textbf{décroissance lente et progressive} des autocorrélations
+qui restent toutes \textbf{largement au-dessus des bandes de significativité},
+confirmant que la série est \textbf{non stationnaire} et qu'une tendance forte
+est présente.
+
+On observe également des \textbf{pics périodiques} aux lags multiples de 12
+(lag 1.0, 2.0, ...), révélant une \textbf{saisonnalité annuelle régulière}.
+L'absence de valeurs négatives et le maintien des autocorrélations à des niveaux
+élevés même aux grands lags traduisent la \textbf{persistance} de la série,
+caractéristique d'un processus avec tendance et saisonnalité.
+
+Les trois composantes $T_t$, $S_t$ et $E_t$ sont donc clairement présentes.
+
+\vspace{0.3cm}
+\subsubsection{Diagramme retardé (Lag Plot)}
+
+\vspace{0.2cm}
+
+```{r lagplot-serie1, fig.width=7, fig.height=4, fig.align='center'}
+lag.plot(serie1_ts,
+         lags     = 12,
+         do.lines = FALSE,
+         main     = "Diagramme retardé — Constructions Immobilières")
+```
+
+Le diagramme retardé visualise la dépendance entre les observations $X_t$ et
+leurs valeurs passées $X_{t-k}$. On observe :
+
+\begin{itemize}
+  \item \textbf{Lags 1 à 3} : une structure linéaire très serrée et bien définie,
+        traduisant une \textbf{autocorrélation très forte} entre observations
+        proches dans le temps.
+  \item \textbf{Lags 4 à 9} : la structure linéaire reste visible mais le nuage
+        de points s'élargit progressivement, indiquant une \textbf{autocorrélation
+        qui s'atténue} avec l'éloignement temporel.
+  \item \textbf{Lag 12} : le nuage se resserre à nouveau, révélant un
+        \textbf{effet saisonnier annuel} — les observations séparées d'un an
+        restent fortement corrélées.
+\end{itemize}
+
+\subsubsection{Décomposition de la série}
+
+\vspace{0.2cm}
+
+```{r decomp-serie1,  fig.width=7, fig.height=4, fig.align='center'}
+decomp_add  = decompose(serie1_ts, type = "additive")
+decomp_mult = decompose(serie1_ts, type = "multiplicative")
+
+plot(decomp_add)
+
+plot(decomp_mult)
+```
+
+\vspace{0.3cm}
+
+\subsubsection{ACF des résidus des deux modèles}
+
+\vspace{0.2cm}
+
+```{r residu-serie1, fig.width=7, fig.height=4, fig.align='center'}
+residu_add  = decomp_add$random
+residu_mult = decomp_mult$random
+
+
+acf(residu_add,
+    na.action = na.pass,
+    main      = "ACF résidus — Modèle additif")
+
+acf(residu_mult,
+    na.action = na.pass,
+    main      = "ACF résidus — Modèle multiplicatif")
+
+```
+L'ACF des résidus du \textbf{modèle additif} présente environ \textbf{9 bâtons}
+dépassant les limites de significativité, indiquant que les résidus ne sont pas
+un bruit blanc et que le modèle additif ne capture pas correctement toute
+la structure de la série.
+
+L'ACF des résidus du \textbf{modèle multiplicatif} ne présente que \textbf{3 bâtons}
+dépassant les limites de significativité, ce qui traduit des résidus beaucoup
+plus proches d'un bruit blanc.
+
+Le modèle multiplicatif présente \textbf{moins de perte d'information} et constitue
+donc le modèle adéquat pour cette série. Cependant, les \textbf{3 bâtons restants}
+qui dépassent encore les limites de significativité indiquent une \textbf{perte
+d'information résiduelle}, suggérant que la partie aléatoire $\varepsilon_t$
+n'est pas encore un bruit blanc pur. Cela justifie l'introduction d'une
+\textbf{variable endogène} — c'est-à-dire les valeurs passées de la série
+elle-même — pour capturer cette dépendance temporelle restante.
+
+La série s'écrit donc :
+
+$$Y_t = T_t \times S_t \times \varepsilon_t(Y_{t-k})$$
+
+\subsection{Phase 2 : Ajustement de la série}
+
+\vspace{0.3cm}
+
+\subsubsection{Modélisation de la tendance par régression polynomiale}
+
+\vspace{0.2cm}
+
+```{r tendance-serie1}
+t = 1:length(serie1_ts)
+
+# Modèle linéaire
+model_lin  = lm(serie1_ts ~ t)
+
+# Modèle quadratique
+model_quad = lm(serie1_ts ~ t + I(t^2))
+
+summary(model_lin)
+summary(model_quad)
+```
+
+\vspace{0.3cm}
+
+```{r tendance-plot-serie1,  fig.width=7, fig.height=4}
+temps = as.numeric(time(serie1_ts))
+
+plot(serie1_ts,
+     main = "Tendance linéaire",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps, as.numeric(fitted(model_lin)),
+      col = "red", lwd = 2)
+
+plot(serie1_ts,
+     main = "Tendance quadratique",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps, as.numeric(fitted(model_quad)),
+      col = "blue", lwd = 2)
+```
+
+\vspace{0.3cm}
+
+```{r comparaison-tendance-serie1}
+cat("Comparaison des modèles de tendance :\n")
+cat("  R² ajusté — Linéaire    :",
+    round(summary(model_lin)$adj.r.squared,  4), "\n")
+cat("  R² ajusté — Quadratique :",
+    round(summary(model_quad)$adj.r.squared, 4), "\n")
+cat("  AIC — Linéaire          :", round(AIC(model_lin),  2), "\n")
+cat("  AIC — Quadratique       :", round(AIC(model_quad), 2), "\n")
+```
+
+Les résultats de la comparaison des deux modèles de tendance sont les suivants :
+
+\begin{itemize}
+  \item Le \textbf{modèle linéaire} affiche un $R^2$ ajusté de \textbf{0.1518}
+        et un AIC de \textbf{3943.84}, indiquant une très faible capacité
+        explicative de la tendance par une droite simple.
+  \item Le \textbf{modèle quadratique} affiche un $R^2$ ajusté de \textbf{0.1923}
+        et un AIC de \textbf{3925.38}, légèrement supérieur au modèle linéaire.
+\end{itemize}
+
+Le modèle quadratique est \textbf{retenu} car il présente un $R^2$ ajusté plus
+élevé et un AIC plus faible. Cependant, les deux valeurs de $R^2$ restent
+\textbf{très faibles}, ce qui s'explique par la présence du \textbf{changement
+structurel majeur} autour de 2002--2008 que ni une droite ni une parabole ne
+peuvent capturer correctement. Graphiquement, on confirme que la tendance
+polynomiale ne suit pas fidèlement l'évolution de la série.
+
+La tendance est donc modélisée par :
+$$\hat{T}_t = \hat{\alpha}_0 + \hat{\alpha}_1 t + \hat{\alpha}_2 t^2$$
+\vspace{0.3cm}
+
+\subsubsection{Modèle harmonique complet}
+
+\vspace{0.2cm}
+
+```{r harmonique-serie1}
+t  = 1:length(serie1_ts)
+Mc = matrix(0, length(serie1_ts), 6)
+Ms = matrix(0, length(serie1_ts), 6)
+
+for (i in 1:6) {
+  Mc[, i] = cos(2 * pi * t * i / 12)
+  Ms[, i] = sin(2 * pi * t * i / 12)
+}
+
+model_harm = lm(serie1_ts ~ t + I(t^2) + Mc + Ms)
+summary(model_harm)
+```
+
+L'analyse des coefficients du modèle complet montre que seuls \textbf{Mc1}
+($p < 2e-16$ ***), \textbf{Mc2} ($p = 0.0003$ ***) et \textbf{Ms1}
+($p = 0.035$ *) sont significatifs. Les coefficients \textbf{Mc3, Mc4, Mc5,
+Mc6, Ms2, Ms3, Ms4, Ms5, Ms6} présentent des p-values largement supérieures
+à 0.05 et sont donc \textbf{non significatifs} — ils seront supprimés du
+modèle réduit.
+
+\vspace{0.3cm}
+
+\subsubsection{Modèle harmonique réduit}
+
+\vspace{0.2cm}
+
+```{r harmonique-reduit-serie1}
+# Uniquement Mc1, Mc2 et Ms1 sont significatifs
+model_harm_red = lm(serie1_ts ~ t + I(t^2) +
+                    Mc[, c(1, 2)] + Ms[, 1])
+summary(model_harm_red)
+```
+
+\vspace{0.3cm}
+
+```{r comparaison-harm-serie1}
+cat("Comparaison des modèles harmoniques :\n")
+cat("  R² ajusté — Modèle complet :",
+    round(summary(model_harm)$adj.r.squared,     4), "\n")
+cat("  R² ajusté — Modèle réduit  :",
+    round(summary(model_harm_red)$adj.r.squared, 4), "\n")
+cat("  AIC — Modèle complet       :", round(AIC(model_harm),     2), "\n")
+cat("  AIC — Modèle réduit        :", round(AIC(model_harm_red), 2), "\n")
+```
+
+\vspace{0.3cm}
+
+```{r plot-harm-serie1, fig.width=7, fig.height=4, fig.align='center'}
+plot(serie1_ts,
+     main = "Ajustement harmonique — Constructions Immobilières",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps, as.numeric(fitted(model_harm_red)),
+      col = "red", lwd = 2)
+```
+
+Dans le modèle réduit, \textbf{tous les coefficients retenus sont significatifs} :
+\textbf{Mc1} ($p < 2e-16$ ***), \textbf{Mc2} ($p = 0.0003$ ***) et
+\textbf{Ms1} ($p = 0.034$ *), ainsi que la tendance quadratique
+\textbf{t} et \textbf{$t^2$}.
+
+La comparaison finale confirme le choix du modèle réduit :
+
+\begin{itemize}
+  \item $R^2$ ajusté : \textbf{0.356 > 0.3455} \checkmark
+  \item AIC : \textbf{3838.47 < 3853.60} \checkmark
+\end{itemize}
+
+Le modèle final retenu s'écrit :
+
+$$\hat{Y}_t = 120.3 + 0.132\,t - 0.000648\,t^2
+- 19.69\cos\!\frac{2\pi t}{12}
+- 7.90\cos\!\frac{4\pi t}{12}
++ 4.55\sin\!\frac{2\pi t}{12} + \varepsilon_t$$
+
+Graphiquement, le modèle harmonique réduit capture correctement la
+\textbf{saisonnalité annuelle} de la série. Cependant, le $R^2$ ajusté
+de \textbf{0.356} reste modéré, confirmant que le \textbf{changement
+structurel} de 2002--2008 ne peut pas être capturé par ce type de modèle.
+
+
+\subsection{Phase 3 : Analyse et modélisation des résidus}
+
+\vspace{0.3cm}
+
+\subsubsection{Extraction et visualisation des résidus}
+
+\vspace{0.2cm}
+
+```{r residu-harm-serie1, fig.width=7, fig.height=4, fig.align='center'}
+residu_harm = ts(residuals(model_harm_red),
+                 start     = c(1982, 1),
+                 frequency = 12)
+
+plot(residu_harm,
+     main = "Résidus du modèle harmonique réduit — Série 1",
+     ylab = "Résidus",
+     xlab = "Temps")
+```
+
+\vspace{0.3cm}
+
+Graphiquement, les résidus présentent une \textbf{tendance non linéaire}
+avec de larges oscillations, confirmant qu'ils ne sont pas stationnaires.
+
+\vspace{0.3cm}
+
+\subsubsection{Test de stationnarité — Test ADF}
+
+\vspace{0.2cm}
+
+```{r adf-serie1}
+cat("--- Test ADF sur les résidus ---\n")
+print(adf.test(residu_harm, alternative = "stationary"))
+```
+\vspace{0.3cm}
+
+Le test ADF donne une p-value de \textbf{0.7815 > 0.05}, donc on
+\textbf{accepte $H_0$} : les résidus sont \textbf{non stationnaires}.
+Une différenciation est nécessaire.
+
+
+\vspace{0.2cm}
+
+Le test de Augmented Dickey-Fuller teste les hypothèses suivantes :
+
+\begin{itemize}
+  \item $H_0$ : la série est \textbf{non stationnaire}
+  \item $H_1$ : la série est \textbf{stationnaire}
+\end{itemize}
+
+\vspace{0.3cm}
+
+\subsubsection{Test de Box-Pierce — Bruit blanc ?}
+
+\vspace{0.2cm}
+
+```{r boxpierce-serie1}
+cat("--- Test de Box-Pierce sur les résidus ---\n")
+print(Box.test(residu_harm, type = "Box-Pierce"))
+```
+
+\vspace{0.2cm}
+
+Le test de Box-Pierce teste les hypothèses suivantes :
+
+\begin{itemize}
+  \item $H_0$ : $\rho_1 = \rho_2 = \cdots = \rho_n = 0$
+        \textit{(pas d'autocorrélation — bruit blanc)}
+  \item $H_1$ : il existe au moins un $\rho_i \neq 0$
+        \textit{(autocorrélation — pas un bruit blanc)}
+\end{itemize}
+
+\vspace{0.3cm}
+
+Le test de Box-Pierce donne une p-value \textbf{< 2.2e-16 < 0.05}, donc on
+\textbf{rejette $H_0$} : les résidus ne sont \textbf{pas un bruit blanc} —
+il existe une autocorrélation significative. La modélisation par un processus
+\textbf{ARIMA} est donc justifiée.
+\vspace{0.3cm}
+
+\subsubsection{Différenciation si nécessaire}
+
+\vspace{0.2cm}
+
+```{r diff-serie1,  fig.width=7, fig.height=4, fig.align='center'}
+residu_diff = diff(residu_harm)
+
+plot(residu_diff,
+     main = "Résidus différenciés — Série 1",
+     ylab = "Résidus",
+     xlab = "Temps")
+
+cat("--- Test ADF sur les résidus différenciés ---\n")
+print(adf.test(residu_diff, alternative = "stationary"))
+
+```
+
+\vspace{0.3cm}
+Après différenciation d'ordre 1, la série des résidus présente une forme
+\textbf{plate et stationnaire} graphiquement, sans tendance ni saisonnalité
+apparente. Le test ADF confirme la stationnarité avec une p-value de
+\textbf{0.01 < 0.05} — on \textbf{rejette $H_0$} et on conclut que les
+résidus différenciés sont \textbf{stationnaires} ($d = 1$).
+\vspace{0.3cm}
+
+\subsubsection{Identification des ordres p et q — ACF et PACF}
+
+\vspace{0.2cm}
+
+```{r acfpacf-serie1, fig.width=7, fig.height=4, fig.align='center'}
+
+acf(residu_diff,
+    main = "ACF — Résidus différenciés")
+
+pacf(residu_diff,
+     main = "PACF — Résidus différenciés")
+
+```
+
+\vspace{0.2cm}
+
+L'identification des ordres se fait comme suit :
+
+\begin{itemize}
+  \item \textbf{p} (ordre AR) : déterminé par la \textbf{PACF} — correspond
+        au nombre de bâtons dépassant l'intervalle de confiance en pointillés.
+  \item \textbf{q} (ordre MA) : déterminé par l'\textbf{ACF} — correspond
+        au nombre de bâtons significatifs en excluant le lag 0.
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Lecture de l'ACF :} On observe \textbf{1 bâton significatif} au lag 1
+(négatif) et un pic au lag 12, suggérant une composante saisonnière.
+On retient donc $q = 1$ et $Q = 1$.
+
+\textbf{Lecture de la PACF :} On observe \textbf{1 bâton significatif} au lag 1
+(fortement négatif) et des pics aux lags 12--13.
+On retient donc $p = 1$ et $d = 1$ (différenciation appliquée).
+
+Le modèle manuel identifié est donc : \textbf{ARIMA(1,1,1)(0,1,1)[12]}
+
+\vspace{0.3cm}
+
+\subsubsection{Modélisation ARIMA}
+
+\vspace{0.2cm}
+
+```{r arima-auto-serie1}
+# Modèle automatique
+model_auto = auto.arima(residu_harm,
+                        seasonal      = TRUE,
+                        stepwise      = FALSE,
+                        approximation = FALSE)
+summary(model_auto)
+```
+
+\vspace{0.2cm}
+
+```{r arima-manuel-serie1}
+# Modèle manuel basé sur ACF/PACF
+# Les ordres p et q seront ajustés après lecture des graphiques
+model_manuel = Arima(residu_harm,
+                     order    = c(1, 1, 1),
+                     seasonal = c(0, 1, 1))
+summary(model_manuel)
+```
+
+\vspace{0.2cm}
+
+```{r comparaison-arima-serie1}
+cat("Comparaison des modèles ARIMA :\n")
+cat("  AIC — auto.arima :", round(AIC(model_auto),   2), "\n")
+cat("  AIC — manuel     :", round(AIC(model_manuel), 2), "\n")
+cat("  BIC — auto.arima :", round(BIC(model_auto),   2), "\n")
+cat("  BIC — manuel     :", round(BIC(model_manuel), 2), "\n")
+```
+
+\vspace{0.3cm}
+La comparaison des deux modèles candidats donne :
+
+\begin{itemize}
+  \item \textbf{auto.arima} : ARIMA(3,0,0)(1,0,1)[12] —
+        AIC = \textbf{2843.68}, BIC = \textbf{2867.58}
+  \item \textbf{Modèle manuel} : ARIMA(1,1,1)(0,1,1)[12] —
+        AIC = \textbf{2763.88}, BIC = \textbf{2779.68}
+\end{itemize}
+
+Le \textbf{modèle manuel ARIMA(1,1,1)(0,1,1)[12]} est retenu car il présente
+un \textbf{AIC et BIC inférieurs} sur les deux critères :
+
+\begin{itemize}
+  \item AIC : \textbf{2763.88 < 2843.68} \checkmark
+  \item BIC : \textbf{2779.68 < 2867.58} \checkmark
+\end{itemize}
+
+La série des résidus suit donc le modèle :
+$$\varepsilon_t \sim \text{ARIMA}(1,1,1)(0,1,1)_{12}$$
+
+Ce modèle capture à la fois la \textbf{dépendance temporelle} à court terme
+(partie AR et MA d'ordre 1) et la \textbf{structure saisonnière} annuelle
+(partie MA saisonnière d'ordre 1 avec différenciation saisonnière).
+\vspace{0.3cm}
+
+\subsubsection{Diagnostic du modèle retenu}
+
+\vspace{0.2cm}
+
+```{r diagnostic-serie1,  fig.width=7, fig.height=4, fig.align='center'}
+checkresiduals(model_manuel)
+```
+
+\vspace{0.2cm}
+
+```{r qqplot-serie1, fig.width=7, fig.height=4, fig.align='center'}
+par(mfrow = c(1, 2))
+
+hist(residuals(model_auto),
+     main = "Histogramme des résidus",
+     xlab = "Résidus",
+     col  = "lightgray")
+
+qqnorm(residuals(model_auto),
+       main = "Q-Q Plot des résidus")
+qqline(residuals(model_auto), col = "red")
+
+par(mfrow = c(1, 1))
+```
+
+\vspace{0.3cm}
+\textbf{Diagnostic du modèle retenu — ARIMA(1,1,1)(0,1,1)[12] :}
+
+\vspace{0.2cm}
+
+\textbf{Graphique des résidus :} Les résidus oscillent autour de zéro sans
+tendance ni saisonnalité apparente, confirmant la \textbf{stationnarité}
+du modèle retenu.
+
+\textbf{ACF des résidus :} La quasi-totalité des bâtons se situent
+\textbf{dans les bandes de confiance}, indiquant l'absence d'autocorrélation
+résiduelle significative.
+
+\textbf{Test de Ljung-Box :} La p-value de \textbf{0.1622 > 0.05} — on
+\textbf{accepte $H_0$} : les résidus sont assimilables à un \textbf{bruit
+blanc}. Le modèle est donc bien spécifié.
+
+\textbf{Histogramme :} La distribution des résidus est \textbf{approximativement
+symétrique} et centrée autour de zéro, suggérant une distribution proche
+de la normale malgré une légère asymétrie à gauche.
+
+\textbf{Q-Q Plot :} Les points suivent \textbf{fidèlement la droite rouge}
+sur la majorité de la plage, confirmant la \textbf{normalité des résidus},
+avec de légères déviations aux extrêmes dues aux valeurs aberrantes liées
+au changement structurel.
+
+Le modèle \textbf{ARIMA(1,1,1)(0,1,1)[12]} est donc \textbf{validé}.
+
+\vspace{0.3cm}
+
+\subsubsection{Prévisions sur 12 mois}
+
+\vspace{0.2cm}
+
+```{r forecast-serie1, fig.width=7, fig.height=4, fig.align='center'}
+prevision = forecast(model_auto, h = 12)
+
+autoplot(prevision) +
+  ggtitle("Prévisions sur 12 mois — Constructions Immobilières") +
+  xlab("Temps") +
+  ylab("Valeur")
+
+print(prevision)
+```
+\vspace{0.3cm}
+
+Les prévisions sur 12 mois (Février 2015 — Janvier 2016) indiquent une
+\textbf{légère tendance à la hausse} des résidus, avec des valeurs comprises
+entre \textbf{31.3} et \textbf{46.4}. Les intervalles de confiance à
+\textbf{80\%} et \textbf{95\%} s'élargissent progressivement avec l'horizon
+de prévision, traduisant une \textbf{incertitude croissante}, ce qui est
+cohérent avec le comportement habituel des modèles ARIMA.
+\vspace{0.3cm}
+
+
+\section{Série 2 — Production Industrielle Alimentaire}
+
+\subsection{Phase 1 : Analyse statistique et graphique}
+
+\vspace{0.3cm}
+
+\subsubsection{Analyse graphique}
+
+\vspace{0.2cm}
+
+```{r plot-serie2,fig.width=7, fig.height=4, fig.align='center'}
+
+plot(serie2_ts,
+     main = "Production Industrielle Alimentaire (1972–2024)",
+     ylab = "Valeur",
+     xlab = "Temps")
+
+```
+\vspace{0.3cm}
+
+La série présente une \textbf{tendance croissante régulière} sur l'ensemble
+de la période 1972--2024, passant d'environ \textbf{58} à \textbf{105}.
+Contrairement à la Série 1, \textbf{aucun changement structurel majeur}
+n'est observé — la croissance est continue et progressive.
+
+On distingue clairement :
+
+\begin{itemize}
+  \item $T_t$ : une \textbf{tendance croissante} quasi-linéaire sur toute
+        la période, avec un léger ralentissement à partir de 2000.
+  \item $S_t$ : une \textbf{saisonnalité régulière} visible par les
+        oscillations périodiques répétées d'une année sur l'autre.
+  \item $E_t$ : des \textbf{fluctuations aléatoires} d'amplitude
+        relativement \textbf{constante} autour de la tendance.
+\end{itemize}
+\vspace{0.3cm}
+
+\subsubsection{Agrégation annuelle}
+
+\vspace{0.2cm}
+
+```{r annual-serie2, fig.width=7, fig.height=4, fig.align='center'}
+serie2_annual = aggregate(serie2_ts, nfrequency = 1, FUN = mean)
+
+plot(serie2_annual,
+     main = "Moyenne annuelle — Production Industrielle Alimentaires",
+     ylab = "Valeur moyenne",
+     xlab = "Année")
+```
+\vspace{0.3cm}
+
+L'agrégation annuelle confirme une \textbf{tendance croissante régulière et
+continue} sur toute la période 1972--2024, passant d'environ \textbf{60} à
+\textbf{102}. Contrairement à la Série 1, \textbf{aucun changement structurel}
+n'est observé — la croissance est stable et progressive, avec un léger
+\textbf{ralentissement entre 2005 et 2010} avant de reprendre.
+
+\vspace{0.3cm}
+
+\subsubsection{Analyse par boîtes à moustaches}
+
+\vspace{0.2cm}
+
+```{r boxplot-serie2, fig.width=5, fig.height=4}
+
+boxplot(serie2_ts ~ cycle(serie2_ts),
+        main   = "Boxplot mensuel — Production Industrielle Alimentaires",
+        ylab   = "Valeur",
+        xlab   = "Mois",
+        names  = c("Jan","Fév","Mar","Avr","Mai","Jun",
+                   "Jul","Aoû","Sep","Oct","Nov","Déc"))
+
+boxplot(serie1_annual,
+        main = "Boxplot annuel — Production Industrielle Alimentaires",
+        ylab = "Valeur moyenne",
+        xlab = "Année")
+
+```
+\vspace{0.3cm}
+Le boxplot mensuel montre des médianes \textbf{relativement proches} entre
+les mois, oscillant entre 88 et 93, ce qui indique une \textbf{saisonnalité
+modérée}. Les mois de \textbf{juillet à octobre} présentent des valeurs
+légèrement plus élevées, tandis que \textbf{janvier et mars} affichent les
+valeurs les plus basses.
+Le boxplot annuel présente une \textbf{large dispersion} avec une médiane
+autour de \textbf{105}, reflet de la forte évolution de la série sur 52 ans.
+L'asymétrie vers le bas traduit la longue période de faibles valeurs au
+début de la série.
+
+\vspace{0.3cm}
+\subsubsection{Analyse statistique descriptive}
+
+\vspace{0.2cm}
+
+```{r stats-serie2}
+cat("Statistiques descriptives — Série 2 :\n")
+cat("  Moyenne        :", round(mean(serie2_raw$valeur), 2), "\n")
+cat("  Variance       :", round(var(serie2_raw$valeur),  2), "\n")
+cat("  Écart-type     :", round(sd(serie2_raw$valeur),   2), "\n")
+cat("  Minimum        :", min(serie2_raw$valeur), "\n")
+cat("  Maximum        :", max(serie2_raw$valeur), "\n")
+
+summary(serie2_ts)
+```
+\vspace{0.3cm}
+Les statistiques descriptives montrent une \textbf{moyenne de 86.09} avec
+un écart-type de \textbf{12.96}, une étendue allant de \textbf{56.73} à
+\textbf{105.37}. Comparée à la Série 1, la dispersion est \textbf{beaucoup
+plus faible} (écart-type 12.96 vs 37.58), ce qui reflète l'évolution
+\textbf{progressive et stable} de la production industrielle alimentaire
+sans rupture structurelle majeure.
+\vspace{0.3cm}
+
+\subsubsection{Fonction d'autocorrélation (ACF)}
+
+\vspace{0.2cm}
+
+```{r acf-serie2,fig.width=7, fig.height=4, fig.align='center'}
+acf(serie2_ts,
+    type = "correlation",
+    plot = TRUE,
+    main = "ACF — Production Industrielle Alimentaires")
+```
+
+\vspace{0.3cm}
+L'ACF présente une \textbf{décroissance extrêmement lente} des autocorrélations
+qui restent \textbf{toutes très élevées} (proches de 1.0) et largement au-dessus
+des bandes de significativité sur tous les lags. Cela confirme que la série est
+\textbf{fortement non stationnaire} avec une \textbf{tendance persistante}
+très marquée. On n'observe pas de pics périodiques nets, ce qui suggère que
+la \textbf{saisonnalité est masquée par la tendance dominante}.
+Les trois composantes $T_t$, $S_t$ et $E_t$ sont présentes, avec une tendance
+particulièrement dominante.
+
+\vspace{0.3cm}
+\subsubsection{Diagramme retardé (Lag Plot)}
+
+\vspace{0.2cm}
+
+```{r lagplot-serie2, fig.width=7, fig.height=4, fig.align='center'}
+lag.plot(serie2_ts,
+         lags     = 12,
+         do.lines = FALSE,
+         main     = "Diagramme retardé — Production Industrielle Alimentaires")
+```
+\vspace{0.2cm}
+
+Le diagramme retardé présente une \textbf{structure linéaire extrêmement serrée
+et bien définie pour tous les lags} de 1 à 12, bien plus prononcée que pour
+la Série 1. Cela traduit une \textbf{autocorrélation très forte et persistante}
+sur l'ensemble des retards, caractéristique d'une série avec une
+\textbf{tendance déterministe forte}.
+
+\begin{itemize}
+  \item \textbf{Lags 1 à 12} : nuages de points quasi-linéaires et très serrés,
+        indiquant que chaque observation est \textbf{très fortement corrélée}
+        à ses valeurs passées.
+  \item La structure ne s'élargit \textbf{pratiquement pas} d'un lag à l'autre,
+        contrairement à la Série 1 — signe d'une tendance dominante et stable.
+\end{itemize}
+\subsubsection{Décomposition de la série}
+
+\vspace{0.2cm}
+
+```{r decomp-serie2,  fig.width=7, fig.height=4, fig.align='center'}
+decomp_add2  = decompose(serie2_ts, type = "additive")
+decomp_mult2 = decompose(serie2_ts, type = "multiplicative")
+
+plot(decomp_add2)
+
+plot(decomp_mult2)
+```
+
+\vspace{0.3cm}
+
+\subsubsection{ACF des résidus des deux modèles}
+
+\vspace{0.2cm}
+
+```{r residu-serie2, fig.width=7, fig.height=4, fig.align='center'}
+residu_add2  = decomp_add2$random
+residu_mult2 = decomp_mult2$random
+
+
+acf(residu_add2,
+    na.action = na.pass,
+    main      = "ACF résidus — Modèle additif")
+
+acf(residu_mult2,
+    na.action = na.pass,
+    main      = "ACF résidus — Modèle multiplicatif")
+
+```
+\vspace{0.3cm}
+
+L'ACF des résidus du \textbf{modèle additif} présente environ \textbf{6 bâtons}
+dépassant les limites de significativité, indiquant une perte d'information
+résiduelle non négligeable.
+L'ACF des résidus du \textbf{modèle multiplicatif} présente également environ
+\textbf{8 bâtons} dépassant les limites de significativité — les deux modèles
+sont donc \textbf{comparables} en termes de résidus.
+
+Cependant, compte tenu de l'analyse graphique qui montre une \textbf{amplitude
+des variations saisonnières constante} autour de la tendance (les deux droites
+enveloppantes sont quasi-parallèles), le \textbf{modèle additif est retenu} :
+
+$$Y_t = T_t + S_t + \varepsilon_t$$
+
+où $T_t$ désigne la tendance croissante régulière, $S_t$ la composante
+saisonnière d'amplitude constante, et $\varepsilon_t(Y_{t-k})$ la composante
+aléatoire dépendant des valeurs passées de la série.
+
+\subsection{Phase 2 : Ajustement de la série}
+
+\vspace{0.3cm}
+
+\subsubsection{Modélisation de la tendance par régression polynomiale}
+
+\vspace{0.2cm}
+
+```{r tendance-serie2}
+t = 1:length(serie2_ts)
+
+# Modèle linéaire
+model_lin2  = lm(serie2_ts ~ t)
+
+# Modèle quadratique
+model_quad2 = lm(serie2_ts ~ t + I(t^2))
+
+summary(model_lin2)
+summary(model_quad2)
+```
+
+\vspace{0.3cm}
+
+```{r tendance-plot-serie2,  fig.width=7, fig.height=4}
+temps2 = as.numeric(time(serie2_ts))
+
+plot(serie2_ts,
+     main = "Tendance linéaire",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps2, as.numeric(fitted(model_lin2)),
+      col = "red", lwd = 2)
+
+plot(serie2_ts,
+     main = "Tendance quadratique",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps2, as.numeric(fitted(model_quad2)),
+      col = "blue", lwd = 2)
+```
+
+\vspace{0.3cm}
+\textbf{Modèle linéaire :} La droite rouge suit \textbf{fidèlement la tendance
+globale} de la série sur toute la période, avec un $R^2$ ajusté de
+\textbf{0.8946} — ce qui signifie que le temps explique \textbf{89.46\%}
+de la variance de la série. Tous les coefficients sont hautement significatifs
+($p < 2e-16$ ***).
+
+\textbf{Modèle quadratique :} La courbe bleue s'ajuste encore mieux à la
+série, capturant le \textbf{ralentissement de la croissance} à partir de 2000.
+Le $R^2$ ajusté atteint \textbf{0.9528} et l'AIC est réduit à \textbf{3082.18}.
+\vspace{0.3cm}
+
+
+```{r comparaison-tendance-serie2}
+cat("Comparaison des modèles de tendance :\n")
+cat("  R² ajusté — Linéaire    :",
+    round(summary(model_lin2)$adj.r.squared,  4), "\n")
+cat("  R² ajusté — Quadratique :",
+    round(summary(model_quad2)$adj.r.squared, 4), "\n")
+cat("  AIC — Linéaire          :", round(AIC(model_lin2),  2), "\n")
+cat("  AIC — Quadratique       :", round(AIC(model_quad2), 2), "\n")
+```
+\vspace{0.3cm}
+La comparaison des deux modèles donne :
+
+\begin{itemize}
+  \item $R^2$ ajusté : \textbf{0.9528 > 0.8946} \checkmark
+  \item AIC : \textbf{3082.18 < 3585.51} \checkmark
+\end{itemize}
+
+Le \textbf{modèle quadratique est retenu}. Contrairement à la Série 1 où
+les $R^2$ étaient très faibles (~0.19), ici le modèle quadratique explique
+\textbf{95.28\%} de la variance, traduisant une tendance \textbf{bien
+capturée par une parabole}. La tendance s'écrit :
+
+$$\hat{T}_t = 57.82 + 0.1347\,t - 0.0001067\,t^2$$
+
+Le coefficient négatif de $t^2$ confirme graphiquement le
+\textbf{ralentissement progressif} de la croissance à partir de 2000.
+\vspace{0.3cm}
+
+\subsubsection{Modèle harmonique complet}
+
+\vspace{0.2cm}
+
+```{r harmonique-serie2}
+t  = 1:length(serie2_ts)
+Mc = matrix(0, length(serie2_ts), 6)
+Ms = matrix(0, length(serie2_ts), 6)
+
+for (i in 1:6) {
+  Mc[, i] = cos(2 * pi * t * i / 12)
+  Ms[, i] = sin(2 * pi * t * i / 12)
+}
+
+model_harm2 = lm(serie2_ts ~ t + I(t^2) + Mc + Ms)
+summary(model_harm2)
+```
+
+\vspace{0.3cm}
+L'analyse des coefficients du modèle complet révèle que \textbf{Ms3}
+($p = 0.195$) et \textbf{Ms6} ($p = 0.420$) sont \textbf{non significatifs}
+— ils seront supprimés. Tous les autres coefficients sont significatifs.
+Le modèle présente déjà un excellent $R^2$ ajusté de \textbf{0.9784}.
+
+\subsubsection{Modèle harmonique réduit}
+
+```{r harmonique-reduit-serie2}
+# Ms3 et Ms6 non significatifs → supprimés
+model_harm_red2 = lm(serie2_ts ~ t + I(t^2) +
+                     Mc[, 1:6] +
+                     Ms[, c(1, 2, 4, 5)])
+summary(model_harm_red2)
+```
+
+\vspace{0.3cm}
+
+```{r comparaison-harm-serie2}
+cat("Comparaison des modèles harmoniques :\n")
+cat("  R² ajusté — Modèle complet :",
+    round(summary(model_harm2)$adj.r.squared,     4), "\n")
+cat("  R² ajusté — Modèle réduit  :",
+    round(summary(model_harm_red2)$adj.r.squared, 4), "\n")
+cat("  AIC — Modèle complet       :", round(AIC(model_harm2),     2), "\n")
+cat("  AIC — Modèle réduit        :", round(AIC(model_harm_red2), 2), "\n")
+```
+
+\vspace{0.3cm}
+
+```{r plot-harm-serie2, fig.width=7, fig.height=4, fig.align='center'}
+plot(serie2_ts,
+     main = "Ajustement harmonique — Production Industrielle Alimentaires ",
+     ylab = "Valeur", xlab = "Temps")
+lines(temps2, as.numeric(fitted(model_harm_red2)),
+      col = "red", lwd = 2)
+```
+\vspace{0.3cm}
+
+Dans le modèle réduit, \textbf{tous les coefficients retenus sont significatifs}
+après suppression de \textbf{Ms3} et \textbf{Ms6}.
+
+La comparaison finale confirme le choix du modèle réduit :
+
+\begin{itemize}
+  \item $R^2$ ajusté : \textbf{0.9784 = 0.9784} — identique, donc le modèle
+        réduit est \textbf{aussi performant} avec moins de paramètres \checkmark
+  \item AIC : \textbf{2601.33 < 2602.85} \checkmark
+\end{itemize}
+
+Le \textbf{modèle réduit est retenu} par principe de parcimonie. Le modèle
+final s'écrit :
+
+$$\hat{Y}_t = 57.87 + 0.1342\,t - 0.000106\,t^2
++ \sum_{k=1}^{6} \hat{\beta}_{1k}\cos\!\frac{2\pi kt}{12}
++ \sum_{\substack{k=1\\k \neq 3,6}}^{5}
+\hat{\beta}_{2k}\sin\!\frac{2\pi kt}{12} + \varepsilon_t$$
+
+Graphiquement, le modèle harmonique réduit s'ajuste \textbf{très fidèlement}
+à la série — la courbe rouge suit parfaitement les oscillations saisonnières
+et la tendance quadratique sur l'ensemble de la période 1972--2024. Le $R^2$
+ajusté de \textbf{0.9784} confirme que le modèle explique \textbf{97.84\%}
+de la variance totale, ce qui est nettement supérieur à la Série 1 (35.6\%).
+Les résidus $\varepsilon_t$ seront analysés en \textbf{Phase 3}.
+\vspace{0.3cm}
+
+\subsection{Phase 3 : Analyse et modélisation des résidus}
+
+\vspace{0.3cm}
+
+\subsubsection{Extraction et visualisation des résidus}
+
+\vspace{0.2cm}
+
+```{r residu-harm-serie2, fig.width=7, fig.height=4, fig.align='center'}
+residu_harm2 = ts(residuals(model_harm_red2),
+                 start     = c(1972, 1),
+                 frequency = 12)
+
+plot(residu_harm2,
+     main = "Résidus du modèle harmonique réduit — Série 2",
+     ylab = "Résidus",
+     xlab = "Temps")
+```
+
+\vspace{0.3cm}
+
+Graphiquement, les résidus présentent des \textbf{ondulations lentes} autour
+de zéro sans tendance nette, suggérant une stationnarité limite.
+
+\vspace{0.3cm}
+
+\subsubsection{Test de stationnarité — Test ADF}
+
+\vspace{0.2cm}
+
+```{r adf-serie2}
+cat("--- Test ADF sur les résidus ---\n")
+print(adf.test(residu_harm2, alternative = "stationary"))
+```
+\vspace{0.3cm}
+
+Le test ADF donne une p-value de \textbf{0.0195 < 0.05}, donc on
+\textbf{rejette $H_0$} : les résidus sont \textbf{stationnaires} —
+\textbf{aucune différenciation n'est nécessaire} ($d = 0$).
+
+
+\vspace{0.2cm}
+
+Le test de Augmented Dickey-Fuller teste les hypothèses suivantes :
+
+\begin{itemize}
+  \item $H_0$ : la série est \textbf{non stationnaire}
+  \item $H_1$ : la série est \textbf{stationnaire}
+\end{itemize}
+
+\vspace{0.3cm}
+
+\subsubsection{Test de Box-Pierce — Bruit blanc ?}
+
+\vspace{0.2cm}
+
+```{r boxpierce-serie2}
+cat("--- Test de Box-Pierce sur les résidus ---\n")
+print(Box.test(residu_harm2, type = "Box-Pierce"))
+```
+
+\vspace{0.2cm}
+
+Le test de Box-Pierce teste les hypothèses suivantes :
+
+\begin{itemize}
+  \item $H_0$ : $\rho_1 = \rho_2 = \cdots = \rho_n = 0$
+        \textit{(pas d'autocorrélation — bruit blanc)}
+  \item $H_1$ : il existe au moins un $\rho_i \neq 0$
+        \textit{(autocorrélation — pas un bruit blanc)}
+\end{itemize}
+
+\vspace{0.3cm}
+
+Le test de Box-Pierce donne une p-value \textbf{< 2.2e-16 < 0.05}, donc on
+\textbf{rejette $H_0$} : les résidus ne sont \textbf{pas un bruit blanc}.
+La modélisation par un processus \textbf{ARIMA} est donc justifiée.
+
+
+```{r acfpacf-serie2, fig.width=7, fig.height=4, fig.align='center'}
+
+acf(residu_harm2,
+    main = "ACF — Résidus série 2")
+
+pacf(residu_harm2,
+     main = "PACF — Résidus série 2")
+
+```
+
+\vspace{0.2cm}
+
+\textbf{Lecture de l'ACF :} Décroissance lente et progressive des
+autocorrélations, toutes positives et significatives — comportement
+typique d'un processus \textbf{AR} dominant. On retient $q = 1$.
+
+\textbf{Lecture de la PACF :} Un seul bâton \textbf{très significatif}
+au lag 1 (~0.8) suivi d'une coupure nette, caractéristique d'un processus
+\textbf{AR(1)}. On retient $p = 1$.
+
+Le modèle candidat manuel identifié est : \textbf{ARIMA(1,0,1)}
+
+\vspace{0.3cm}
+
+\subsubsection{Modélisation ARIMA}
+
+\vspace{0.2cm}
+
+```{r arima-auto-serie2}
+# Modèle automatique
+model_auto2 = auto.arima(residu_harm2,
+                        seasonal      = TRUE,
+                        stepwise      = FALSE,
+                        approximation = FALSE)
+summary(model_auto2)
+```
+
+\vspace{0.2cm}
+
+```{r arima-manuel-serie2}
+# Modèle manuel basé sur ACF/PACF
+# p=1 (PACF lag 1), d=0 (stationnaire), q=1 (ACF)
+# P=1, D=0, Q=1 : pics saisonniers détectés aux lags 12
+model_manuel2 = Arima(residu_harm2,
+                      order    = c(1, 0, 1),
+                      seasonal = c(1, 0, 1))
+summary(model_manuel2)
+```
+
+\vspace{0.2cm}
+
+```{r comparaison-arima-serie2}
+cat("Comparaison des modèles ARIMA :\n")
+cat("  AIC — auto.arima :", round(AIC(model_auto2),   2), "\n")
+cat("  AIC — manuel     :", round(AIC(model_manuel2), 2), "\n")
+cat("  BIC — auto.arima :", round(BIC(model_auto2),   2), "\n")
+cat("  BIC — manuel     :", round(BIC(model_manuel2), 2), "\n")
+```
+
+\vspace{0.3cm}
+La comparaison des deux modèles candidats donne :
+
+\begin{itemize}
+  \item \textbf{auto.arima} : ARIMA(1,0,1)(1,0,1)[12] \textit{with zero mean} —
+        AIC = \textbf{1762.64}, BIC = \textbf{1784.84}
+  \item \textbf{Modèle manuel} : ARIMA(1,0,1)(1,0,1)[12] \textit{with non-zero mean} —
+        AIC = \textbf{1764.60}, BIC = \textbf{1791.24}
+\end{itemize}
+
+Les deux modèles ont \textbf{exactement la même structure} — ce qui confirme
+que la lecture graphique de l'ACF/PACF était correcte. La seule différence
+est que le modèle manuel estime une \textbf{moyenne non nulle} (mean = 0.1146)
+qui s'avère \textbf{non significative} ($p > 0.05$), ce qui explique la
+légère pénalisation par l'AIC et le BIC.
+
+Le \textbf{modèle auto.arima est retenu} par principe de parcimonie :
+
+\begin{itemize}
+  \item AIC : \textbf{1762.64 < 1764.60} \checkmark
+  \item BIC : \textbf{1784.84 < 1791.24} \checkmark
+\end{itemize}
+
+La série des résidus suit donc le modèle :
+$$\varepsilon_t \sim \text{ARIMA}(1,0,1)(1,0,1)_{12}$$
+
+Ce modèle capture à la fois la \textbf{forte persistance} de la série
+(ar1 = 0.9047) et la \textbf{structure saisonnière annuelle} via les
+composantes SAR(1) et SMA(1).
+\vspace{0.3cm}
+
+\subsubsection{Diagnostic du modèle retenu}
+
+\vspace{0.2cm}
+
+```{r diagnostic-serie2,  fig.width=7, fig.height=4, fig.align='center'}
+checkresiduals(model_auto2)
+```
+
+\vspace{0.2cm}
+
+```{r qqplot-serie2, fig.width=7, fig.height=4, fig.align='center'}
+par(mfrow = c(1, 2))
+
+hist(residuals(model_auto2),
+     main = "Histogramme des résidus",
+     xlab = "Résidus",
+     col  = "lightgray")
+
+qqnorm(residuals(model_auto2),
+       main = "Q-Q Plot des résidus")
+qqline(residuals(model_auto2), col = "red")
+
+par(mfrow = c(1, 1))
+```
+
+\vspace{0.3cm}
+\textbf{Diagnostic du modèle retenu — ARIMA(1,0,1)(1,0,1)[12] :}
+
+\vspace{0.2cm}
+
+\textbf{Graphique des résidus :} Les résidus oscillent autour de zéro de façon
+\textbf{stationnaire} sur toute la période 1972--2024, sans tendance ni
+saisonnalité apparente. On note une \textbf{valeur aberrante} vers 2020,
+vraisemblablement liée à l'impact de la \textbf{crise COVID-19} sur la
+production industrielle alimentaire.
+
+\textbf{ACF des résidus :} La quasi-totalité des bâtons se situent
+\textbf{dans les bandes de confiance}, confirmant l'absence d'autocorrélation
+résiduelle significative.
+
+\textbf{Test de Ljung-Box :} La p-value de \textbf{0.3674 > 0.05} — on
+\textbf{accepte $H_0$} : les résidus sont assimilables à un \textbf{bruit
+blanc}. Le modèle est donc bien spécifié.
+
+\textbf{Histogramme :} La distribution est \textbf{approximativement normale}
+et centrée autour de zéro, malgré une légère asymétrie à gauche due à la
+valeur aberrante de 2020.
+
+\textbf{Q-Q Plot :} Les points suivent \textbf{très fidèlement la droite
+rouge} sur la quasi-totalité de la plage, confirmant la \textbf{normalité
+des résidus}. La déviation en bas à gauche correspond à la valeur aberrante
+COVID-19 de 2020 — point isolé qui n'affecte pas la qualité globale du modèle.
+
+Le modèle \textbf{ARIMA(1,0,1)(1,0,1)[12]} est donc \textbf{validé}.
+$$\varepsilon_t \sim \text{ARIMA}(1,0,1)(1,0,1)_{12}$$
+
+\vspace{0.3cm}
+
+\subsubsection{Prévisions sur 12 mois}
+
+\vspace{0.2cm}
+
+```{r forecast-serie2, fig.width=7, fig.height=4, fig.align='center'}
+prevision2 = forecast(model_auto2, h = 12)
+
+autoplot(prevision2) +
+  ggtitle("Prévisions sur 12 mois — Production Industrielle Alimentaires ") +
+  xlab("Temps") +
+  ylab("Valeur")
+
+print(prevision2)
+```
+\vspace{0.3cm}
+
+Les prévisions sur 12 mois (Avril 2024 — Mars 2025) indiquent des valeurs
+des résidus oscillant autour de \textbf{zéro}, comprises entre
+\textbf{-0.85} et \textbf{1.34}, ce qui est cohérent avec un processus
+stationnaire bien modélisé.
+
+Les intervalles de confiance à \textbf{80\%} et \textbf{95\%} s'élargissent
+progressivement avec l'horizon de prévision, traduisant une
+\textbf{incertitude croissante} — comportement attendu pour tout modèle ARIMA.
+
+Graphiquement, les prévisions convergent rapidement vers \textbf{zéro} avec
+des intervalles de confiance qui s'élargissent, ce qui est caractéristique
+d'un processus \textbf{stationnaire} — contrairement à la Série 1 où les
+prévisions montraient une légère tendance à la hausse due à la
+différenciation ($d=1$).
+\vspace{0.3cm}
+
+\section{Analyse Croisée (CCF)}
+
+\vspace{0.3cm}
+
+\subsection{Restriction à la période commune}
+
+\vspace{0.2cm}
+
+```{r ccf-prep}
+# Restriction à la période commune : Fév 1982 → Jan 2015
+serie2_common = window(serie2_ts,
+                       start = c(1982, 2),
+                       end   = c(2015, 1))
+
+residu_harm2_common = window(residu_harm2,
+                             start = c(1982, 2),
+                             end   = c(2015, 1))
+
+cat("Période commune :\n")
+cat("  Série 1 :", length(serie1_ts), "observations\n")
+cat("  Série 2 :", length(serie2_common), "observations\n")
+```
+
+\vspace{0.3cm}
+
+\subsection{Corrélation croisée sur les séries brutes}
+
+\vspace{0.2cm}
+
+```{r ccf-brut, fig.width=7, fig.height=5, fig.align='center'}
+acf(ts.union(serie1_ts, serie2_common),
+    na.action = na.pass,
+    main = "Corrélogramme croisé — Séries brutes")
+```
+
+\vspace{0.3cm}
+
+\subsection{Corrélation croisée sur les résidus}
+
+\vspace{0.2cm}
+
+```{r ccf-residu,  fig.width=7, fig.height=5, fig.align='center'}
+acf(ts.union(residu_harm, residu_harm2_common),
+    na.action = na.pass,
+    main      = "Corrélogramme croisé — Résidus")
+```
+\subsection{Interprétation}
+
+\textbf{Corrélogramme croisé — Séries brutes :}
+Les autocorrélations individuelles des deux séries restent \textbf{fortes
+et positives}, confirmant la non-stationnarité déjà identifiée. La
+corrélation croisée entre les deux séries montre des valeurs
+\textbf{négatives et significatives}, indiquant que les deux séries
+évoluent en \textbf{sens opposés} sur la période commune 1982--2015 :
+lorsque la valeur des constructions immobilières augmente, la production
+industrielle alimentaire tend à diminuer relativement, et vice versa.
+
+\vspace{0.2cm}
+
+\textbf{Corrélogramme croisé — Résidus :}
+Après élimination des parties déterministes (tendance et saisonnalité),
+la corrélation croisée entre les résidus des deux modèles devient
+\textbf{quasi nulle et non significative} pour les lags négatifs,
+indiquant que la \textbf{production industrielle alimentaire n'influence
+pas les constructions immobilières} avec un retard.
+
+Cependant, les résidus de la Série 1 présentent encore une
+\textbf{autocorrélation propre forte}, ce qui confirme la présence
+d'une \textbf{variable endogène} dominante — les valeurs passées de
+la série elle-même sont plus explicatives qu'une variable exogène.
+
+\vspace{0.3cm}
+
+\subsection{Modélisation avec variable exogène}
+
+\vspace{0.2cm}
+
+La corrélation croisée sur les résidus étant \textbf{faible}, l'ajout
+d'une \textbf{variable exogène} ($X_t$ = Production Industrielle
+Alimentaire) dans le modèle ARIMA de la Série 1 peut néanmoins être
+testé pour vérifier si elle apporte une information supplémentaire :
+
+```{r xreg-serie1}
+# Aligner les deux séries sur exactement la même période
+serie1_common = window(serie1_ts,
+                       start = c(1982, 2),
+                       end   = c(2015, 1))
+
+cat("Vérification des longueurs :\n")
+cat("  Série 1 :", length(serie1_common), "observations\n")
+cat("  Série 2 :", length(serie2_common), "observations\n")
+
+model_xreg = Arima(serie1_common,
+                   order    = c(1, 1, 1),
+                   seasonal = c(0, 1, 1),
+                   xreg     = serie2_common)
+summary(model_xreg)
+
+cat("\nComparaison avec/sans variable exogène :\n")
+cat("  AIC sans xreg :", round(AIC(model_manuel),  2), "\n")
+cat("  AIC avec xreg :", round(AIC(model_xreg),    2), "\n")
+```
+
+Les résultats du modèle avec variable exogène donnent :
+
+\begin{itemize}
+  \item Le coefficient \textbf{xreg = -0.7123} avec un écart-type de
+        \textbf{0.4736} — ce coefficient est \textbf{non significatif}
+        ($|t| = 0.7123/0.4736 = 1.50 < 1.96$), indiquant que la production
+        industrielle alimentaire n'est pas un prédicteur significatif
+        de la valeur des constructions immobilières.
+  \item Cependant, l'AIC passe de \textbf{2763.88} à \textbf{2752.91},
+        soit une \textbf{amélioration de 10.97 points}.
+\end{itemize}
+
+\begin{itemize}
+  \item AIC sans xreg : \textbf{2763.88}
+  \item AIC avec xreg : \textbf{2752.91} \checkmark
+\end{itemize}
+
+Bien que le coefficient de la variable exogène soit \textbf{non significatif
+individuellement}, la légère amélioration de l'AIC suggère qu'elle apporte
+une \textbf{information marginale} au modèle. Ce résultat confirme que la
+relation entre les deux séries
+
+\section{Conclusion}
+
+\vspace{0.3cm}
+
+Ce travail a porté sur l'analyse et la modélisation de deux séries
+temporelles économiques mensuelles suivant la méthodologie de
+\textbf{Box-Jenkins} en trois phases.
+
+\vspace{0.2cm}
+
+La \textbf{Série 1} (Constructions Immobilières) présente un
+\textbf{changement structurel majeur} lié à la crise de 2008 et suit
+un \textbf{modèle multiplicatif}. Son ajustement harmonique explique
+\textbf{35.6\%} de la variance, et ses résidus sont modélisés par
+\textbf{ARIMA(1,1,1)(0,1,1)[12]} :
+$$Y_t = T_t \times S_t \times \varepsilon_t, \quad
+\varepsilon_t \sim \text{ARIMA}(1,1,1)(0,1,1)_{12}$$
+
+La \textbf{Série 2} (Production Industrielle Alimentaire) présente une
+\textbf{tendance croissante régulière} sans rupture et suit un
+\textbf{modèle additif}. Son ajustement harmonique explique
+\textbf{97.84\%} de la variance, et ses résidus sont modélisés par
+\textbf{ARIMA(1,0,1)(1,0,1)[12]} :
+$$Y_t = T_t + S_t + \varepsilon_t, \quad
+\varepsilon_t \sim \text{ARIMA}(1,0,1)(1,0,1)_{12}$$
+
+L'analyse croisée révèle une \textbf{relation négative} entre les deux
+séries brutes qui devient \textbf{faible sur les résidus}, confirmant
+une influence indirecte entre les deux secteurs économiques.
